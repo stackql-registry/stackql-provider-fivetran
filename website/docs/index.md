@@ -1,0 +1,351 @@
+---
+title: fivetran
+hide_title: false
+hide_table_of_contents: false
+keywords:
+  - fivetran
+  - fivetran rest api
+  - elt
+  - data pipelines
+  - connectors
+  - stackql
+  - infrastructure-as-code
+  - configuration-as-data
+  - cloud inventory
+description: Query, provision and manage Fivetran groups, destinations, connections, schema configuration, transformations, users, teams, roles and webhooks using SQL
+custom_edit_url: null
+image: /img/stackql-featured-image.png
+id: 'provider-intro'
+---
+
+import CopyableCode from '@site/src/components/CopyableCode/CopyableCode';
+
+Query, provision and operate Fivetran using SQL - groups and destinations, connections and their sync state, schema, table and column configuration, transformations and transformation projects, users, teams, roles and memberships, webhooks, system keys, log services, private links, proxy agents and hybrid deployment agents, and the connector catalogue.
+
+
+
+:::info[Provider Summary] 
+
+total services: __15__  
+total resources: __45__  
+
+:::
+
+See also:
+[[` SHOW `]](https://stackql.io/docs/language-spec/show) [[` DESCRIBE `]](https://stackql.io/docs/language-spec/describe)  [[` REGISTRY `]](https://stackql.io/docs/language-spec/registry)
+* * *
+
+## Installation
+
+To pull the latest version of the `fivetran` provider, run the following command:
+
+```bash
+REGISTRY PULL fivetran;
+```
+> To view previous provider versions or to pull a specific provider version, see [here](https://stackql.io/docs/language-spec/registry).
+
+## Authentication
+
+The provider authenticates with HTTP basic authentication, using a Fivetran API key and API secret. Generate them in the Fivetran dashboard (user menu -> API Key), export them as <CopyableCode code="FIVETRAN_APIKEY" /> and <CopyableCode code="FIVETRAN_APISECRET" /> (the same variables the Fivetran Terraform provider reads), and StackQL picks them up with no further configuration:
+
+```bash
+export FIVETRAN_APIKEY='...'
+export FIVETRAN_APISECRET='...'
+```
+
+or using PowerShell:
+
+```powershell
+$env:FIVETRAN_APIKEY = '...'
+$env:FIVETRAN_APISECRET = '...'
+```
+
+A system key (created under `fivetran.account.system_keys`) is used the same way: the key is the username and its secret is the password.
+
+## Getting started
+
+Confirm the credentials and see which account they belong to:
+
+```sql
+SELECT account_id, account_name, user_id
+FROM fivetran.account.account_info;
+```
+
+List the groups (each group holds one destination and the connections that load into it):
+
+```sql
+SELECT id, name, created_at
+FROM fivetran.groups.groups;
+```
+
+List every connection with its sync state:
+
+```sql
+SELECT id, group_id, service, "schema", paused, sync_frequency,
+       json_extract(status, '$.setup_state') AS setup_state,
+       json_extract(status, '$.sync_state') AS sync_state,
+       succeeded_at, failed_at
+FROM fivetran.connections.connections;
+```
+
+Browse the services, resources and methods:
+
+```sql
+SHOW SERVICES IN fivetran;
+SHOW RESOURCES IN fivetran.connections;
+SHOW METHODS IN fivetran.connections.connections;
+DESCRIBE EXTENDED fivetran.connections.connections;
+```
+
+## Conventions
+
+- **Identifiers are snake_case.** Path parameters are presented as `connection_id`, `group_id`, `user_id` and so on.
+- **`schema`, `start`, `end` and `limit` are SQL keywords.** Quote them when they are column or parameter names: `"schema"`, `"start"`, `"end"`, `"limit"`.
+- **Collections are paged for you.** Every list follows the API's cursor until the collection is exhausted. `"limit"` is the page size, not a row cap: add `WHERE "limit" = 1000` to ask for larger pages (the API default is 100, the maximum 1000) and so fewer calls. A SQL `LIMIT` is applied to the rows after they arrive and does not reduce the calls.
+- **StackQL reads at most 20 pages per query by default.** That is 2,000 rows at the default page size and 20,000 with `"limit" = 1000`. Start StackQL with `--http.response.pageLimit=-1` to remove the cap.
+- **Filters the API supports are pushed down.** `group_id` and `"schema"` on connections, `active` and `user_type` on users, `group_id`, `project_id` and `type` on transformations travel as query parameters; any other predicate is applied to the rows after they arrive.
+- **Nested values are JSON.** `status`, `config`, `schedule` and similar columns are addressed with `json_extract`. When writing, pass an object or array as a JSON string (`'{"schema": "sales"}'`).
+- **List rows are summaries on five resources.** `destinations`, `log_services`, `connector_types`, `proxy_agents` and `transformation_projects` return more columns from the single read (`WHERE destination_id = ...`) than from the list - `config` on a destination is the usual one.
+- **`INSERT` and `UPDATE` can return the result.** Add `RETURNING id, ...` to get the created or updated row back in the same statement.
+- **`UPDATE` sends only the columns you set**, and sends them as strings; the API accepts `'true'` and `'720'` for boolean and numeric attributes.
+
+## Rate limit
+
+The API allows a fixed number of calls in a rolling one-hour window and answers `429 Too Many Requests` with a `retry-after` header once it is used up. The allowance is stated in the `x-rate-limit` response header (500 on the account this provider was tested against). A list costs one call per page, so prefer `"limit" = 1000` on large collections, filter on `group_id` where the API supports it, and avoid small `"limit"` values, which multiply the calls.
+
+## Example queries
+
+### Connection health across the account
+
+Connections that are broken, incomplete or have a failed last sync:
+
+```sql
+SELECT id, group_id, service, "schema", paused,
+       json_extract(status, '$.setup_state') AS setup_state,
+       json_extract(status, '$.sync_state') AS sync_state,
+       json_extract(status, '$.update_state') AS update_state,
+       succeeded_at, failed_at
+FROM fivetran.connections.connections
+WHERE json_extract(status, '$.setup_state') <> 'connected'
+   OR failed_at > succeeded_at;
+```
+
+### Connections in one group
+
+`group_id` is pushed down to the API:
+
+```sql
+SELECT id, service, "schema", paused, sync_frequency, schedule_type
+FROM fivetran.connections.connections
+WHERE group_id = 'decent_dropsy';
+```
+
+### Sync history of a connection
+
+```sql
+SELECT sync_id, status, "start", "end", reason,
+       json_extract(stages, '$.load.volume') AS load_volume
+FROM fivetran.connections.sync_history
+WHERE connection_id = 'speak_inexpensive';
+```
+
+### Destinations and their setup status
+
+```sql
+SELECT id, group_id, service, region, setup_status, time_zone_offset
+FROM fivetran.destinations.destinations;
+```
+
+The configuration of one destination (secrets are masked by the API):
+
+```sql
+SELECT id, service, config
+FROM fivetran.destinations.destinations
+WHERE destination_id = 'decent_dropsy';
+```
+
+### Which tables does a connection sync
+
+The schema configuration is one row per connection; `schemas` is a JSON document keyed by schema and table name:
+
+```sql
+SELECT schema_change_handling, enable_new_by_default,
+       json_extract(schemas, '$.public.tables.orders.enabled') AS orders_enabled
+FROM fivetran.connections.schema_configs
+WHERE connection_id = 'speak_inexpensive';
+```
+
+### Who has access to what
+
+Users and their account role:
+
+```sql
+SELECT id, email, given_name, family_name, role, verified, active, logged_in_at
+FROM fivetran.users.users;
+```
+
+Group memberships of a user, and of a team:
+
+```sql
+SELECT id AS group_id, role, created_at
+FROM fivetran.users.group_memberships
+WHERE user_id = 'nozzle_eat';
+
+SELECT id AS group_id, role, created_at
+FROM fivetran.teams.group_memberships
+WHERE team_id = 'clarification_expand';
+```
+
+The roles that can be granted:
+
+```sql
+SELECT name, scope, is_custom, is_deprecated, description
+FROM fivetran.account.roles;
+```
+
+### The connector catalogue
+
+```sql
+SELECT id, name, type, connector_class, service_status, link_to_docs
+FROM fivetran.metadata.connector_types
+WHERE "limit" = 1000;
+```
+
+The configuration a connector type accepts (the keys of `config` when creating a connection of that type):
+
+```sql
+SELECT id, name, config, auth
+FROM fivetran.metadata.connector_types
+WHERE service = 'google_sheets';
+```
+
+### Provisioning
+
+Create a group, and get its identifier back:
+
+```sql
+INSERT INTO fivetran.groups.groups (name)
+SELECT 'analytics'
+RETURNING id, name, created_at;
+```
+
+Create a destination in the group. `config` is a JSON object whose keys depend on the destination `service`; with `run_setup_tests` false the destination is stored without being tested:
+
+```sql
+INSERT INTO fivetran.destinations.destinations (
+  group_id, service, region, time_zone_offset, run_setup_tests, config
+)
+SELECT 'decent_dropsy', 'postgres_rds_warehouse', 'GCP_US_EAST4', '0', false,
+       '{"host": "warehouse.example.com", "port": 5432, "database": "analytics", "user": "fivetran", "password": "...", "connection_type": "Directly"}'
+RETURNING id, service, setup_status;
+```
+
+Create a connection, paused:
+
+```sql
+INSERT INTO fivetran.connections.connections (
+  group_id, service, paused, run_setup_tests, config
+)
+SELECT 'decent_dropsy', 'webhooks', true, false,
+       '{"schema": "events", "table": "inbound"}'
+RETURNING id, service, "schema", paused;
+```
+
+Change the sync frequency and unpause:
+
+```sql
+UPDATE fivetran.connections.connections
+SET sync_frequency = 60, paused = 'false'
+WHERE connection_id = 'speak_inexpensive'
+RETURNING id, sync_frequency, paused;
+```
+
+Stop syncing one table (the schema-level and table-level edits are `UPDATE` on `schema_configs`, addressed by `schema_name` and `table_name`):
+
+```sql
+UPDATE fivetran.connections.schema_configs
+SET enabled = 'false'
+WHERE connection_id = 'speak_inexpensive'
+  AND schema_name = 'public'
+  AND table_name = 'audit_log';
+```
+
+Register a webhook for the account, or for one group by adding `group_id`:
+
+```sql
+INSERT INTO fivetran.webhooks.webhooks (url, events, active, secret)
+SELECT 'https://hooks.example.com/fivetran', '["sync_start", "sync_end"]', true, '...'
+RETURNING id, type, url;
+```
+
+Grant a team access to a group:
+
+```sql
+INSERT INTO fivetran.teams.group_memberships (team_id, id, role)
+SELECT 'clarification_expand', 'decent_dropsy', 'Destination Analyst'
+RETURNING id, role;
+```
+
+### Lifecycle operations
+
+Actions are `EXEC` methods on the resource they act on:
+
+```sql
+-- trigger a sync now
+EXEC fivetran.connections.connections.sync @connection_id = 'speak_inexpensive';
+
+-- re-sync selected tables from scratch
+EXEC fivetran.connections.connections.resync
+  @connection_id = 'speak_inexpensive',
+  @scope = '{"public": ["orders", "customers"]}';
+
+-- run the setup tests of a connection or a destination
+EXEC fivetran.connections.connections.run_setup_tests @connection_id = 'speak_inexpensive';
+EXEC fivetran.destinations.destinations.run_setup_tests @destination_id = 'decent_dropsy';
+
+-- reload the schema configuration from the source
+EXEC fivetran.connections.schema_configs.reload
+  @connection_id = 'speak_inexpensive', @exclude_mode = 'PRESERVE';
+
+-- run a transformation
+EXEC fivetran.transformations.transformations.run @transformation_id = 'wither_overheat';
+
+-- rotate a system key
+EXEC fivetran.account.system_keys.rotate @key_id = 'meaningless_restoration', @expiration_period = 'ONE_MONTH';
+```
+
+`sync` and `resync` move data, which is what Fivetran bills for. `EXEC` takes string and numeric values; a method whose only optional attributes are booleans is called without them.
+
+### Removing resources
+
+A group is deleted after its connections and its destination:
+
+```sql
+DELETE FROM fivetran.connections.connections WHERE connection_id = 'speak_inexpensive';
+DELETE FROM fivetran.destinations.destinations WHERE destination_id = 'decent_dropsy';
+DELETE FROM fivetran.groups.groups WHERE group_id = 'decent_dropsy';
+```
+
+
+## Services
+<div class="row">
+<div class="providerDocColumn">
+<a href="/services/account/">account</a><br />
+<a href="/services/certificates/">certificates</a><br />
+<a href="/services/connections/">connections</a><br />
+<a href="/services/connector_sdk/">connector_sdk</a><br />
+<a href="/services/destinations/">destinations</a><br />
+<a href="/services/external_logging/">external_logging</a><br />
+<a href="/services/external_secrets_managers/">external_secrets_managers</a><br />
+<a href="/services/groups/">groups</a><br />
+</div>
+<div class="providerDocColumn">
+<a href="/services/hybrid_deployment/">hybrid_deployment</a><br />
+<a href="/services/metadata/">metadata</a><br />
+<a href="/services/networking/">networking</a><br />
+<a href="/services/teams/">teams</a><br />
+<a href="/services/transformations/">transformations</a><br />
+<a href="/services/users/">users</a><br />
+<a href="/services/webhooks/">webhooks</a><br />
+</div>
+</div>

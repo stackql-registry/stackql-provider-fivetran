@@ -1,0 +1,10 @@
+# Normalize line endings: everything text is LF in the repo and on checkout
+# (the shell scripts and node scripts run under WSL/Linux CI, and the CI
+# drift check compares the generated artifacts byte for byte).
+* text=auto eol=lf
+*.png binary
+*.ico binary
+*.jpg binary
+*.gif binary
+*.woff binary
+*.woff2 binary

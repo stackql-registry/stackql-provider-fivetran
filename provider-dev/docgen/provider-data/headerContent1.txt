@@ -1,0 +1,24 @@
+---
+title: fivetran
+hide_title: false
+hide_table_of_contents: false
+keywords:
+  - fivetran
+  - fivetran rest api
+  - elt
+  - data pipelines
+  - connectors
+  - stackql
+  - infrastructure-as-code
+  - configuration-as-data
+  - cloud inventory
+description: Query, provision and manage Fivetran groups, destinations, connections, schema configuration, transformations, users, teams, roles and webhooks using SQL
+custom_edit_url: null
+image: /img/stackql-featured-image.png
+id: 'provider-intro'
+---
+
+import CopyableCode from '@site/src/components/CopyableCode/CopyableCode';
+
+Query, provision and operate Fivetran using SQL - groups and destinations, connections and their sync state, schema, table and column configuration, transformations and transformation projects, users, teams, roles and memberships, webhooks, system keys, log services, private links, proxy agents and hybrid deployment agents, and the connector catalogue.
+

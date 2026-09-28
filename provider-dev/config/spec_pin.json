@@ -1,0 +1,30 @@
+{
+  "specs": {
+    "fivetran-v1": {
+      "url": "https://fivetran.com/assets-docs/openapi/file_v1.json",
+      "filename": "fivetran-v1.json",
+      "spec_version": "v1",
+      "openapi": "3.0.1",
+      "paths": 105,
+      "operations": 179,
+      "schemas": 147,
+      "sha256": "7da34593de3f8731bd27528181afd5e73605c70d5f8bf2cfecd9b2c01a71d597",
+      "sanitized_sha256": "6db89c53b154841e8e1c33b21a947b0fc9bdb3b4dfd4dc5572d98886b4d79eea",
+      "fixes": {
+        "discriminator_families_collapsed": 15,
+        "discriminator_variants_dropped": 1702,
+        "variant_properties_declared": 20,
+        "orphan_schemas_removed": 2842,
+        "accept_header_params_removed": 157,
+        "accept_header_versioned_removed": 22,
+        "bare_object_response_enveloped": 3,
+        "data_array_declared": 1,
+        "required_name_corrected": 2,
+        "relative_doc_links_absolutized": 55
+      },
+      "redactions": {},
+      "bytes": 3234181,
+      "fetched": "2026-09-27"
+    }
+  }
+}
