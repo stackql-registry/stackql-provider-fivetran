@@ -23,6 +23,7 @@ SHELL := bash
 .DEFAULT_GOAL := help
 
 PROVIDER := fivetran
+SOURCE_PROJECT ?= https://github.com/stackql-registry/stackql-provider-$(PROVIDER)
 SERVICES_DIR := provider-dev/openapi/src/$(PROVIDER)
 # The server (https://api.fivetran.com, fixed) is the single source of truth
 # in provider-dev/config/servers.json - shared by bin/split.mjs and this file.
@@ -143,7 +144,8 @@ docs: ## generate the website docs, then sanitize
 	  --provider-name $(PROVIDER) \
 	  --provider-dir ./$(SERVICES_DIR)/v00.00.00000 \
 	  --output-dir ./website \
-	  --provider-data-dir ./provider-dev/docgen/provider-data 	  --snake-case-aliases
+	  --provider-data-dir ./provider-dev/docgen/provider-data 	  --snake-case-aliases \
+	  --source-project $(SOURCE_PROJECT)
 	node website/scripts/sanitize-docs.mjs
 
 website: ## build the docusaurus microsite (vendors shared config first)
