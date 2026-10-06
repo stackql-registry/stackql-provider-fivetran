@@ -28,6 +28,7 @@ Query, provision and operate Fivetran using SQL - groups and destinations, conne
 
 total services: __15__  
 total resources: __45__  
+source project: __[stackql-provider-fivetran](https://github.com/stackql-registry/stackql-provider-fivetran)__  
 
 :::
 
